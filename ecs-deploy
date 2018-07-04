@@ -14,6 +14,7 @@ TIMEOUT=90
 VERBOSE=false
 TAGVAR=false
 TAGONLY=""
+OVERRIDEONLY=""
 CONTAINER_ENV='{"environment": []}'
 ENABLE_ROLLBACK=false
 AWS_CLI=$(which aws)
@@ -276,16 +277,22 @@ function createNewTaskDefJson() {
     # Get a JSON representation of the current task definition
     # + Update definition to use new image name
     # + Filter the def
-    if [[ "x$TAGONLY" == "x" ]]; then
-      DEF=$( echo "$TASK_DEFINITION" \
-            | sed -e "s|\"image\": *\"${imageWithoutTag}:.*\"|\"image\": \"${useImage}\"|g" \
-            | sed -e "s|\"image\": *\"${imageWithoutTag}\"|\"image\": \"${useImage}\"|g" \
-            | jq '.taskDefinition' )
-    else
-      DEF=$( echo "$TASK_DEFINITION" \
-            | sed -e "s|\(\"image\": *\".*:\)\(.*\)\"|\1${useImage}\"|g" \
-            | jq '.taskDefinition' )
+    selectContainerName="."
+    if [[ "x$OVERRIDEONLY" != "x" ]]; then
+        selectContainerName="select(.name==\""$OVERRIDEONLY\"")"
     fi
+
+    if [[ "x$TAGONLY" != "x" ]]; then
+      useImage=$( echo "$TASK_DEFINITION" \
+                    | sed -e "s|\(\"image\": *\".*:\)\(.*\)\"|\1${useImage}\"|g" \
+                    | jq -r '.taskDefinition.containerDefinitions[0].image' )
+    fi
+    CONTAINER_DEFINITIONS=$( echo "$TASK_DEFINITION" \
+        | jq ".taskDefinition.containerDefinitions[] | $selectContainerName |= . + {"image": \""$useImage\""}" \
+        | jq -s '{containerDefinitions:.}' )
+
+    DEF=$( echo "$TASK_DEFINITION" \
+        | jq ".taskDefinition | del(.containerDefinitions) | . + $CONTAINER_DEFINITIONS" )
 
     # Default JQ filter for new task definition
     NEW_DEF_JQ_FILTER="family: .family, volumes: .volumes, containerDefinitions: .containerDefinitions, placementConstraints: .placementConstraints"
@@ -531,6 +538,10 @@ if [ "$BASH_SOURCE" == "$0" ]; then
                 ;;
             -to|--tag-only)
                 TAGONLY="$2"
+                shift
+                ;;
+            -oo|--override-only)
+                OVERRIDEONLY="$2"
                 shift
                 ;;
             --max-definitions)

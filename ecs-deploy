@@ -14,8 +14,6 @@ TIMEOUT=90
 VERBOSE=false
 TAGVAR=false
 TAGONLY=""
-OVERRIDEONLY=""
-CONTAINER_ENV='{"environment": []}'
 ENABLE_ROLLBACK=false
 AWS_CLI=$(which aws)
 AWS_ECS="$AWS_CLI --output json ecs"
@@ -277,22 +275,16 @@ function createNewTaskDefJson() {
     # Get a JSON representation of the current task definition
     # + Update definition to use new image name
     # + Filter the def
-    selectContainerName="."
-    if [[ "x$OVERRIDEONLY" != "x" ]]; then
-        selectContainerName="select(.name==\""$OVERRIDEONLY\"")"
+    if [[ "x$TAGONLY" == "x" ]]; then
+      DEF=$( echo "$TASK_DEFINITION" \
+            | sed -e "s|\"image\": *\"${imageWithoutTag}:.*\"|\"image\": \"${useImage}\"|g" \
+            | sed -e "s|\"image\": *\"${imageWithoutTag}\"|\"image\": \"${useImage}\"|g" \
+            | jq '.taskDefinition' )
+    else
+      DEF=$( echo "$TASK_DEFINITION" \
+            | sed -e "s|\(\"image\": *\".*:\)\(.*\)\"|\1${useImage}\"|g" \
+            | jq '.taskDefinition' )
     fi
-
-    if [[ "x$TAGONLY" != "x" ]]; then
-      useImage=$( echo "$TASK_DEFINITION" \
-                    | sed -e "s|\(\"image\": *\".*:\)\(.*\)\"|\1${useImage}\"|g" \
-                    | jq -r '.taskDefinition.containerDefinitions[0].image' )
-    fi
-    CONTAINER_DEFINITIONS=$( echo "$TASK_DEFINITION" \
-        | jq ".taskDefinition.containerDefinitions[] | $selectContainerName |= . + {"image": \""$useImage\""}" \
-        | jq -s '{containerDefinitions:.}' )
-
-    DEF=$( echo "$TASK_DEFINITION" \
-        | jq ".taskDefinition | del(.containerDefinitions) | . + $CONTAINER_DEFINITIONS" )
 
     # Default JQ filter for new task definition
     NEW_DEF_JQ_FILTER="family: .family, volumes: .volumes, containerDefinitions: .containerDefinitions, placementConstraints: .placementConstraints"
@@ -317,8 +309,6 @@ function createNewTaskDefJson() {
     # Build new DEF with jq filter
     NEW_DEF=$(echo $DEF | jq "{${NEW_DEF_JQ_FILTER}}")
 
-    NEW_DEF=$(echo $NEW_DEF | jq " del(.containerDefinitions[].environment[]) | .containerDefinitions[] += $CONTAINER_ENV")
-    
     # If in test mode output $NEW_DEF
     if [ "$BASH_SOURCE" != "$0" ]; then
       echo $NEW_DEF
@@ -455,7 +445,6 @@ if [ "$BASH_SOURCE" == "$0" ]; then
     set -o pipefail
     set -u
     set -e
-
     # If no args are provided, display usage information
     if [ $# == 0 ]; then usage; fi
 
@@ -526,22 +515,12 @@ if [ "$BASH_SOURCE" == "$0" ]; then
                 DESIRED="$2"
                 shift
                 ;;
-            -E|--container-variable)
-                TEMP_ENV=(${2//=/ })
-                CONTAINER_ENV=$(echo $CONTAINER_ENV | jq '.environment[.environment| length] |= . + {"name": "'${TEMP_ENV[0]}'", "value": "'${TEMP_ENV[1]}'"}')
-                echo $CONTAINER_ENV
-                shift
-                ;;
             -e|--tag-env-var)
                 TAGVAR="$2"
                 shift
                 ;;
             -to|--tag-only)
                 TAGONLY="$2"
-                shift
-                ;;
-            -oo|--override-only)
-                OVERRIDEONLY="$2"
                 shift
                 ;;
             --max-definitions)

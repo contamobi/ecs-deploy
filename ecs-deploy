@@ -15,6 +15,7 @@ VERBOSE=false
 TAGVAR=false
 TAGONLY=""
 ENABLE_ROLLBACK=false
+UPDATE_ECS_RULE=false
 AWS_CLI=$(which aws)
 AWS_ECS="$AWS_CLI --output json ecs"
 
@@ -45,6 +46,7 @@ Optional arguments:
     -t | --timeout          Default is 90s. Script monitors ECS Service for new task definition to be running.
     -e | --tag-env-var      Get image tag name from environment variable. If provided this will override value specified in image name argument.
     -to | --tag-only        New tag to apply to all images defined in the task (multi-container task). If provided this will override value specified in image name argument.
+    -ucs | --update-ecs-rule Update ecs rule with the new task definition. 
     --max-definitions       Number of Task Definition Revisions to persist before deregistering oldest revisions.
     --enable-rollback       Rollback task definition if new version is not running before TIMEOUT
     -v | --verbose          Verbose output
@@ -395,6 +397,10 @@ if [ "$BASH_SOURCE" == "$0" ]; then
                 TAGONLY="$2"
                 shift
                 ;;
+            -ucs|--update-ecs-rule)
+                UPDATE_ECS_RULE=true
+                shift
+                ;;
             --max-definitions)
                 MAX_DEFINITIONS="$2"
                 shift
@@ -455,7 +461,7 @@ if [ "$BASH_SOURCE" == "$0" ]; then
     # update service if needed
     if [ $SERVICE == false ]; then
         echo "Task definition updated successfully"
-    else
+    elif [ $UPDATE_ECS_RULE == true]; then
         #updateService
         aws events put-targets --rule "$SERVICE-$CLUSTER" --targets "Id"="$img-task-$CLUSTER-Id","Arn"="arn:aws:ecs:$AWS_DEFAULT_REGION:$domainAccount:cluster/$CLUSTER","RoleArn"="arn:aws:iam::$domainAccount:role/$CLUSTER-$img-ecs","EcsParameters"="{"TaskDefinitionArn"= $NEW_TASKDEF,"TaskCount"= 1}"
 

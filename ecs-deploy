@@ -560,11 +560,9 @@ if [ "$BASH_SOURCE" == "$0" ]; then
                 ;;
             -ucs|--update-ecs-rule)
                 UPDATE_ECS_RULE=true
-                shift
                 ;;
             -dat|--deploy-as-task)
                 DEPLOY_TASK=true
-                shift
                 ;;
             --max-definitions)
                 MAX_DEFINITIONS="$2"
@@ -626,7 +624,7 @@ if [ "$BASH_SOURCE" == "$0" ]; then
     # update service if needed
     if [ $SERVICE == false ]; then
         echo "Task definition updated successfully"
-    elif [ $UPDATE_ECS_RULE == true]; then
+    elif [ $UPDATE_ECS_RULE == true ]; then
         #updateService
         aws events put-targets --rule "$SERVICE-$CLUSTER" --targets "Id"="$img-task-$CLUSTER-Id","Arn"="arn:aws:ecs:$AWS_DEFAULT_REGION:$domainAccount:cluster/$CLUSTER","RoleArn"="arn:aws:iam::$domainAccount:role/$CLUSTER-$img-ecs","EcsParameters"="{"TaskDefinitionArn"= $NEW_TASKDEF,"TaskCount"= 1}"
 
